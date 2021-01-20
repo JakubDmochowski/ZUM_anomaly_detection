@@ -1,0 +1,162 @@
+---
+title: "Raport"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+require(tidyverse)
+library(rhdf5)
+library(factoextra)
+library(NbClust)
+library(e1071)
+library(dbscan)
+library(mclust)
+library(DDoutlier)
+library(dplyr)
+library(plotly)
+library(ROCR)
+library(psych)
+library(SwarmSVM)
+```
+
+
+```{r load data}
+smtp_x = read.csv(file = 'smtp_x.csv', header=FALSE)[c(14000:17999),]
+smtp_y = read.csv(file = 'smtp_y.csv', header=FALSE)[c(14000:17999),]
+wine_x = read.csv(file = 'wine_x.csv', header=FALSE)
+wine_y = read.csv(file = 'wine_y.csv', header=FALSE)
+
+smtp_test_x = read.csv(file = 'smtp_x.csv', header=FALSE)[c(48000:49999),]
+smtp_test_y = read.csv(file = 'smtp_y.csv', header=FALSE)[c(48000:49999),]
+```
+
+Aby lepiej zrozumiec charakterystyke danych, wyswietlmy je i zaznaczmy znane anomalie zanim przejdziemy do nienadzorowanej detekcji anomalii.
+
+```{r}
+smtp = smtp_x %>% mutate(c = smtp_y)
+plot_ly(smtp,
+        x = ~V1,
+        y = ~V2,
+        z = ~V3,
+        color=~c,
+        colors=c('#ffff00', '#000000'),
+        opacity=0.7,
+        size=1
+      )
+```
+
+W przypadku danych ze zbioru wine.csv, wizualizacja jest mało miarodajna, ponieważ ciężko jest stwierdzić którą kombinacje spośród 14 wymiarów będzie najlepiej pokazać by wyłonić anomalie.
+```{r}
+wine = wine_x %>% mutate(c = wine_y$V1)
+plot_ly(wine,
+        x = ~V1,
+        y = ~V7,
+        z = ~V11,
+        color=~c,
+        colors=c('#ffff00', '#000000'),
+        opacity=0.7,
+        size=1
+      )
+```
+
+Dowiedzmy się przynajmniej ile takich anomalii w zbiorze jest, aby poznać skalę problemu.
+
+```{r}
+sum(smtp_y)
+sum(wine_y)
+```
+Widzimy, że ze zbioru smtp zaobserwowalismy 13 anomalii spośród 4000 przypadków testowych, natomiast w zbiorze wine jest 10 anomalii spośród 129 przypadków.
+
+#SMTP
+
+###Grupowanie
+
+#####K-Means
+Do pogrupowania danych z użyciem algorytmu centroidów, trzeba wiedzieć ile takich centroidów ma być w danych.
+Sprawdzimy to z wykorzystaniem funkcji fviz_nbclust z pakietu factoextra.
+Jako, że można użyć kilku metod do sprawdzenia optymalnej ilości klastrów, sprawdźmy więcej niż jedną.
+
+```{r}
+fviz_nbclust(smtp_x, kmeans, method = "silhouette")
+```
+
+```{r}
+fviz_nbclust(smtp_x, kmeans, method = "wss")
+```
+
+```{r number of clusters}
+fviz_nbclust(smtp_x, kmeans, method = "gap_stat", k.max=8, nboot=50)
+```
+
+Zwizualizujmy, jak wygląda grupowanie dla wybranej ilości centroidów.
+
+```{r}
+cluster_data = kmeans(smtp_x, 4, algorithm="Hartigan-Wong")
+fviz_cluster(cluster_data, data = smtp_x)
+```
+Należałoby sprawdzić które z punktów najmniej pasują do otrzymanych grup.
+Wyliczymy odległości od środków grup dla każdej krotki i sprawdzimy ich rozkład.
+
+```{r}
+cluster_centers = cluster_data$centers
+data = smtp_x
+data = data %>% mutate(c = smtp_y)
+data %<>% mutate(group = cluster_data$cluster) %>% mutate(dist = sqrt((V1-cluster_centers[group, 1])^2 + (V2-cluster_centers[group, 2])^2 + (V3-cluster_centers[group, 3])^2)) %>% arrange(dist)
+plot(data$dist)
+```
+Widzimy kilka znacząco odstających punktów. Arbitralnie ustawmy poziom oznaczenia outlierów na taki, który odetnie przypadki znacząco odstające od reszty i zobaczmy, które punkty zostały oznaczone.
+
+```{r}
+data = data %>% mutate(pred = as.integer(dist > 5))
+plot_ly(data,
+        x = ~V1,
+        y = ~V2,
+        z = ~V3,
+        color=~pred,
+        colors=c('#ffff00', '#000000'),
+        opacity=0.7,
+        size=1
+      )
+```
+
+
+Porównując detekcję z faktycznymi anomaliami, widzimy pewną korelacje między wynikami.
+Sprawdźmy jakość predykcji.
+
+```{r}
+pred = prediction(data$c, data$pred)
+perf = performance(pred, "tpr", "fpr")
+plot(perf)
+```
+
+
+Analiza ROC daje nam obraz zadowalający, pole pod krzywą jest bliskie 1, więc model wydaje się być dobry.
+Sprawdźmy jeszcze miarę F.
+
+```{r}
+data = data %>% mutate(tp = c & pred)
+data = data %>% mutate(fp = !c & pred)
+data = data %>% mutate(tn = !c & !pred)
+data = data %>% mutate(fn = c & !pred)
+tally(data, fn)
+recall = tally(data, tp) / (tally(data, tp) + tally(data, fn))
+precision = tally(data, tp) / (tally(data, tp) + tally(data, fp))
+f_value = 2 * recall * precision / (recall + precision)
+f_value
+
+```
+
+Jako, że ta miara wysokie wyniki zwraca tylko gdy oba współczynniki, tj precyzji i odzysku, naraz dają wysokie wyniki, to jakość predykcji możemy uznać za dobrą.
+
+Spróbujmy na podstawie zbudowanego modelu przewidzieć wynik grupowania dla nowych danych
+```{r}
+predict.kmeans <- function(object, newdata){
+    centers <- object$centers
+    n_centers <- nrow(centers)
+    dist_mat <- as.matrix(dist(rbind(centers, newdata)))
+    dist_mat <- dist_mat[-seq(n_centers), seq(n_centers)]
+    max.col(-dist_mat)
+}
+
+predictions = predict(cluster_data, smtp_test_x)
+```
