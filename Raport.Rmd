@@ -265,24 +265,47 @@ f_value <- function (cm) {
 ## Support Vector Machines (SVM)
 
 ```{r}
-svm_model = svm(as.factor(class) ~ ., data = data_train, type = 'C-classification', kernel = 'polynomial')
-y_pred = predict(svm_model, newdata = data_test_x)
-cm = table(data_test_y$class, y_pred)
-f_value(cm)
+svm.model = svm(as.factor(class) ~ ., data = data_train, type = 'C-classification', kernel = 'polynomial', probability = TRUE)
+svm.pred = predict(svm.model, newdata = data_test_x)
+svm.cm = table(data_test_y$class, svm.pred)
+f_value(svm.cm)
 ```
 
 ```{r}
-nvb_model = naiveBayes(as.factor(class) ~ ., data = data_train)
-y_pred = predict(nvb_model, newdata = data_test_x)
-cm = table(data_test_y$class, y_pred)
-f_value(cm)
+nvb.model = naiveBayes(as.factor(class) ~ ., data = data_train)
+nvb.pred = predict(nvb.model, newdata = data_test_x)
+nvb.cm = table(data_test_y$class, nvb.pred)
+f_value(nvb.cm)
 ```
 
 
 ```{r}
-nvb_model = ctree(as.factor(class) ~ ., data = data_train)
-y_pred = predict(nvb_model, newdata = data_test_x)
-cm = table(data_test_y$class, y_pred)
-f_value(cm)
+ct.model = ctree(as.factor(class) ~ ., data = data_train)
+ct.pred = predict(ct.model, newdata = data_test_x)
+ct.cm = table(data_test_y$class, ct.pred)
+f_value(ct.cm)
 ```
 
+
+
+```{r}
+require(ROCR)
+
+svm.prob = predict(svm.model, type="prob", newdata= data_test_x, probability = TRUE)
+svm.rocr = prediction(attr(svm.prob, "probabilities")[,2], data_test_y$class)
+svm.perf = performance(svm.rocr, "tpr","fpr")
+
+nvb.prob = predict(nvb.model, newdata=data_test_x, type="raw")
+nvb.rocr = prediction(nvb.prob[,2], data_test_y$class)
+nvb.perf = performance(nvb.rocr, "tpr","fpr")
+
+ct.prob = predict(ct.model, newdata=data_test_x, type="prob")
+ct.rocr = prediction(ct.prob[,2], data_test_y$class)
+ct.perf = performance(ct.rocr, "tpr","fpr")
+
+plot(svm.perf, col=4, main="ROC curves of different machine learning classifier")
+legend(0.6, 0.6, c('svm', 'ctree', 'Naive Bayes'), 4:6)
+
+plot(ct.perf, col=5, add=TRUE)
+plot(nvb.perf, col=6, add=TRUE)
+```
