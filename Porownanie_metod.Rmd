@@ -1,0 +1,80 @@
+---
+title: "Raport_Wyniki"
+output: html_document
+---
+
+```{r load data}
+rm(list = ls())
+mammography_x = read.csv(file = 'mammography_x.csv', header=FALSE)
+mammography_y = read.csv(file = 'mammography_y.csv', header=FALSE)
+mammography = mammography_x %>% mutate(class = mammography_y$V1)
+
+annthyroid_x = read.csv(file = 'annthyroid_x.csv', header=FALSE)
+annthyroid_y = read.csv(file = 'annthyroid_y.csv', header=FALSE)
+annthyroid = annthyroid_x %>% mutate(class = annthyroid_y$V1)
+```
+
+
+```{r echo=FALSE}
+split_ratio = 0.8
+set.seed(123)
+split = sample.split(mammography, SplitRatio = split_ratio)
+data_train = subset(mammography, split == TRUE)
+data_test = subset(mammography, split == FALSE)
+
+metric = "euclidean"
+method = "kmeans"
+dissimilarity_measure = "distance"
+args = c(6, "Hartigan-Wong")
+outlier_threshold_train = 0.8
+outlier_threshold_test = 0.5
+source("Interface.R", local=knitr::knit_global(), echo=FALSE)
+```
+
+
+```{r echo=FALSE}
+split_ratio = 0.8
+set.seed(123)
+split = sample.split(mammography, SplitRatio = split_ratio)
+data_train = subset(mammography, split == TRUE)
+data_test = subset(mammography, split == FALSE)
+
+metric = "euclidean"
+method = "dbscan"
+dissimilarity_measure = "DB"
+args = c(4.55, 0.05)
+source("Interface.R", local=knitr::knit_global(), echo=FALSE)
+```
+
+
+
+```{r echo=FALSE}
+split_ratio = 0.8
+set.seed(123)
+split = sample.split(annthyroid, SplitRatio = split_ratio)
+data_train = subset(annthyroid, split == TRUE)
+data_test = subset(annthyroid, split == FALSE)
+
+metric = "euclidean"
+method = "kmeans"
+dissimilarity_measure = "distance"
+args = c(5, "Hartigan-Wong")
+outlier_threshold_train = 0.3
+outlier_threshold_test = 0.3
+source("Interface.R", local=knitr::knit_global(), echo=FALSE)
+```
+
+
+```{r echo=FALSE}
+split_ratio = 0.8
+set.seed(123)
+split = sample.split(annthyroid, SplitRatio = split_ratio)
+data_train = subset(annthyroid, split == TRUE)
+data_test = subset(annthyroid, split == FALSE)
+
+metric = "euclidean"
+method = "dbscan"
+dissimilarity_measure = "DB"
+args = c(0.0475, 0.05)
+source("Interface.R", local=knitr::knit_global(), echo=FALSE)
+```

@@ -19,6 +19,7 @@ library(psych)
 library(knitr)
 library(data.table)
 library(caTools)
+library(partykit)
 ```
 
 ```{r load data}
@@ -148,8 +149,8 @@ plot(data$dist)
 Miara niepodobieństwa mapuje nam dane wielowymiarowe na jeden wymiar. Jednowymiarowe dane jesteśmy w stanie porównać, dzięki czemu możemy określić jakiś próg, powyżej którego będziemy dane traktowali jako anomalie.
 
 ```{r}
-outlier_treshold = 0.5
-data = data %>% mutate(pred = as.integer(dist > outlier_treshold))
+outlier_threshold = 0.5
+data = data %>% mutate(pred = as.integer(dist > outlier_threshold))
 plot_ly(data,
         x = ~V1,
         y = ~V2,
@@ -200,7 +201,7 @@ Aby określić jak model radzi sobie z nowymi danymi, będziemy musieli go zasto
 
 
 ```{r}
-outlier_treshold = 0.8
+outlier_threshold = 0.8
 predict.kmeans <- function(object, newdata){
     centers <- object$centers
     n_centers <- nrow(centers)
@@ -214,7 +215,7 @@ rm(data)
 data = data_test %>% mutate(group = groups)
 data %<>% mutate(dist = sqrt((V1-cluster_centers[group, 1])^2 + (V2-cluster_centers[group, 2])^2 + (V3-cluster_centers[group, 3])^2 + (V4-cluster_centers[group, 4])^2)) %>% arrange(dist)
 data$dist = data$dist / max(data$dist)
-data = data %>% mutate(pred = as.integer(dist > outlier_treshold))
+data = data %>% mutate(pred = as.integer(dist > outlier_threshold))
 plot(data$dist)
 ```
 
@@ -244,3 +245,88 @@ Miary jakości powyżej oznaczają, że detekcja anomalii z użyciem takich para
 Może być to spowodowane, że algorytm centroidów jest słabo dostosowany do charakterystyki danych tego zbioru, jak również słabym dopasowaniem miary niepodobieństwa.
 
 Możliwe, że w przypadku tego zbioru danych zastosowanie innych algorytmów grupowania oraz innych miar niepodobieństwa do grup okazałoby się jakościowo lepszym rozwiązaniem.
+
+
+
+```{r}
+f_value <- function (cm) {
+  fp = cm[1,2]
+  fn = cm[2,1]
+  tp = cm[2,2]
+  recall = tp / (tp+fn)
+  precision = tp / (tp+fp)
+  f = (2 * recall * precision) / (recall + precision)
+  return(f)
+}
+```
+
+## Support Vector Machines (SVM)
+
+```{r}
+svm_model = svm(as.factor(class) ~ ., data = data_train, type = 'C-classification', kernel = 'polynomial')
+y_pred = predict(svm_model, newdata = data_test_x)
+cm = table(data_test_y$class, y_pred)
+f_value(cm)
+```
+
+```{r}
+nvb_model = naiveBayes(as.factor(class) ~ ., data = data_train)
+y_pred = predict(nvb_model, newdata = data_test_x)
+cm = table(data_test_y$class, y_pred)
+f_value(cm)
+```
+
+
+```{r}
+nvb_model = ctree(as.factor(class) ~ ., data = data_train)
+y_pred = predict(nvb_model, newdata = data_test_x)
+cm = table(data_test_y$class, y_pred)
+f_value(cm)
+```
+
+```{r}
+rm(list = ls())
+
+mammography_x = read.csv(file = 'mammography_x.csv', header=FALSE)
+mammography_y = read.csv(file = 'mammography_y.csv', header=FALSE)
+mammography = mammography_x %>% mutate(class = mammography_y$V1)
+
+split_ratio = 0.8
+split = sample.split(mammography, SplitRatio = split_ratio)
+data_train = subset(mammography, split == TRUE)
+data_test = subset(mammography, split == FALSE)
+
+data_train_x = data_train %>% select(1:6)
+data_train_y = data_train %>% select(7)
+data_test_x = data_test %>% select(1:6)
+data_test_y = data_test %>% select(7)
+
+metric = "euclidean"
+method = "kmeans"
+dissimilarity_measure = "distance"
+args = c(3, 0.05)
+outlier_threshold_train = 0.8
+outlier_threshold_test = 0.5
+
+  diss_matrix = dist(data_train_x, method=metric)
+  print(paste(as.numeric(args[1])))
+  cluster_data = dbscan(diss_matrix, eps=as.integer(args[1]))
+  plot(
+    fviz_cluster(
+      list(data = data_train_x, 
+      cluster=cluster_data$cluster),
+      ggtheme = theme_minimal()
+    )
+  )
+  groups = predict(cluster_data, data_test_x, data=data_train_x)
+  data = data_test %>% mutate(group = as.integer(!groups))
+```
+
+
+```{r}
+library(DDoutlier)
+diss = data %>% select(1:6)
+data$class = DB(diss, d = as.numeric(args[1]), fraction = as.numeric(args[2]))$classification
+data = data %>% mutate(class = as.integer(class == 'Outlier'))
+
+```
