@@ -1,5 +1,5 @@
 ---
-title: "Raport"
+title: "Przykładowy przebieg doboru hiperparametrów"
 output: pdf_document
 ---
 
@@ -16,58 +16,98 @@ library(dplyr)
 library(plotly)
 library(ROCR)
 library(psych)
-library(SwarmSVM)
+library(knitr)
+library(data.table)
+library(caTools)
 ```
 
-
 ```{r load data}
-smtp_x = read.csv(file = 'smtp_x.csv', header=FALSE)[c(14000:17999),]
-smtp_y = read.csv(file = 'smtp_y.csv', header=FALSE)[c(14000:17999),]
-wine_x = read.csv(file = 'wine_x.csv', header=FALSE)
-wine_y = read.csv(file = 'wine_y.csv', header=FALSE)
+mammography_x = read.csv(file = 'mammography_x.csv', header=FALSE)
+mammography_y = read.csv(file = 'mammography_y.csv', header=FALSE)
 
-smtp_test_x = read.csv(file = 'smtp_x.csv', header=FALSE)[c(48000:49999),]
-smtp_test_y = read.csv(file = 'smtp_y.csv', header=FALSE)[c(48000:49999),]
+mammography = mammography_x %>% mutate(class = mammography_y$V1)
 ```
 
 Aby lepiej zrozumiec charakterystyke danych, wyswietlmy je i zaznaczmy znane anomalie zanim przejdziemy do nienadzorowanej detekcji anomalii.
 
-```{r}
-smtp = smtp_x %>% mutate(c = smtp_y)
-plot_ly(smtp,
+
+```{r show data}
+plot_ly(mammography,
         x = ~V1,
         y = ~V2,
-        z = ~V3,
-        color=~c,
+        color=~class,
+        colors=c('#ffff00', '#000000'),
+        opacity=0.7,
+        size=1
+      )
+plot_ly(mammography,
+        x = ~V1,
+        y = ~V3,
+        color=~class,
+        colors=c('#ffff00', '#000000'),
+        opacity=0.7,
+        size=1
+      )
+plot_ly(mammography,
+        x = ~V1,
+        y = ~V4,
+        color=~class,
+        colors=c('#ffff00', '#000000'),
+        opacity=0.7,
+        size=1
+      )
+plot_ly(mammography,
+        x = ~V2,
+        y = ~V3,
+        color=~class,
+        colors=c('#ffff00', '#000000'),
+        opacity=0.7,
+        size=1
+      )
+plot_ly(mammography,
+        x = ~V2,
+        y = ~V4,
+        color=~class,
+        colors=c('#ffff00', '#000000'),
+        opacity=0.7,
+        size=1
+      )
+plot_ly(mammography,
+        x = ~V3,
+        y = ~V4,
+        color=~class,
         colors=c('#ffff00', '#000000'),
         opacity=0.7,
         size=1
       )
 ```
 
-W przypadku danych ze zbioru wine.csv, wizualizacja jest mało miarodajna, ponieważ ciężko jest stwierdzić którą kombinacje spośród 14 wymiarów będzie najlepiej pokazać by wyłonić anomalie.
-```{r}
-wine = wine_x %>% mutate(c = wine_y$V1)
-plot_ly(wine,
-        x = ~V1,
-        y = ~V7,
-        z = ~V11,
-        color=~c,
-        colors=c('#ffff00', '#000000'),
-        opacity=0.7,
-        size=1
-      )
-```
+W przypadku danych o więcej niż 3 wymiarach, ciężko jest zwizualizować dane tak by widać było anomalie na pierwszy rzut oka.
 
 Dowiedzmy się przynajmniej ile takich anomalii w zbiorze jest, aby poznać skalę problemu.
 
 ```{r}
-sum(smtp_y)
-sum(wine_y)
+sum(mammography_y)
 ```
-Widzimy, że ze zbioru smtp zaobserwowalismy 13 anomalii spośród 4000 przypadków testowych, natomiast w zbiorze wine jest 10 anomalii spośród 129 przypadków.
 
-#SMTP
+Podział zbioru danych na treningowe i testowe z informacją o ilości anomalii w podzbiorach.
+
+```{r}
+split_ratio = 0.8
+
+set.seed(123)
+split = sample.split(mammography, SplitRatio = split_ratio)
+data_train = subset(mammography, split == TRUE)
+data_train_x = data_train %>% select(1:6)
+data_train_y = data_train %>% select(7)
+
+data_test = subset(mammography, split == FALSE)
+data_test_x = data_test %>% select(1:6)
+data_test_y = data_test %>% select(7)
+
+sum(data_train_y)
+sum(data_test_y)
+```
 
 ###Grupowanie
 
@@ -77,37 +117,39 @@ Sprawdzimy to z wykorzystaniem funkcji fviz_nbclust z pakietu factoextra.
 Jako, że można użyć kilku metod do sprawdzenia optymalnej ilości klastrów, sprawdźmy więcej niż jedną.
 
 ```{r}
-fviz_nbclust(smtp_x, kmeans, method = "silhouette")
+fviz_nbclust(data_train_x, kmeans, method = "silhouette")
 ```
 
 ```{r}
-fviz_nbclust(smtp_x, kmeans, method = "wss")
+fviz_nbclust(data_train_x, kmeans, method = "wss")
 ```
 
 ```{r number of clusters}
-fviz_nbclust(smtp_x, kmeans, method = "gap_stat", k.max=8, nboot=50)
+fviz_nbclust(data_train_x, kmeans, method = "gap_stat", k.max=8, nboot=50)
 ```
 
 Zwizualizujmy, jak wygląda grupowanie dla wybranej ilości centroidów.
 
 ```{r}
-cluster_data = kmeans(smtp_x, 4, algorithm="Hartigan-Wong")
-fviz_cluster(cluster_data, data = smtp_x)
+no_clusters = 6
+cluster_data = kmeans(data_train_x, no_clusters, algorithm="Hartigan-Wong")
+fviz_cluster(cluster_data, data = data_train_x)
 ```
-Należałoby sprawdzić które z punktów najmniej pasują do otrzymanych grup.
-Wyliczymy odległości od środków grup dla każdej krotki i sprawdzimy ich rozkład.
+Tutaj, aby wybrać anomalie spośród punktów w grupach należałoby dobrać jakąś miarę niepodobieństwa.
+Określmy przykładową miarę niepodobieństwa jako odległość danej od środka grupy do której została zakwalifikowana.
 
 ```{r}
 cluster_centers = cluster_data$centers
-data = smtp_x
-data = data %>% mutate(c = smtp_y)
-data %<>% mutate(group = cluster_data$cluster) %>% mutate(dist = sqrt((V1-cluster_centers[group, 1])^2 + (V2-cluster_centers[group, 2])^2 + (V3-cluster_centers[group, 3])^2)) %>% arrange(dist)
+data = data_train
+data %<>% mutate(group = cluster_data$cluster) %>% mutate(dist = sqrt((V1-cluster_centers[group, 1])^2 + (V2-cluster_centers[group, 2])^2 + (V3-cluster_centers[group, 3])^2 + (V4-cluster_centers[group, 4])^2)) %>% arrange(dist)
+data$dist = data$dist / max(data$dist)
 plot(data$dist)
 ```
-Widzimy kilka znacząco odstających punktów. Arbitralnie ustawmy poziom oznaczenia outlierów na taki, który odetnie przypadki znacząco odstające od reszty i zobaczmy, które punkty zostały oznaczone.
+Miara niepodobieństwa mapuje nam dane wielowymiarowe na jeden wymiar. Jednowymiarowe dane jesteśmy w stanie porównać, dzięki czemu możemy określić jakiś próg, powyżej którego będziemy dane traktowali jako anomalie.
 
 ```{r}
-data = data %>% mutate(pred = as.integer(dist > 5))
+outlier_treshold = 0.5
+data = data %>% mutate(pred = as.integer(dist > outlier_treshold))
 plot_ly(data,
         x = ~V1,
         y = ~V2,
@@ -119,26 +161,23 @@ plot_ly(data,
       )
 ```
 
+Po zakwalifikowaniu anomalii, możemy porównać wyniki z faktycznie wykrytymi anomaliami podanymi w danych wejściowych. W ten sposób dowiemy się, jaka jest jakość modelu a-priori.
+Na tym etapie wybieramy jakimi miarami jakości chcielibyśmy się posłużyć. W naszym przypadku wybieramy analizę ROC oraz miarę F1.
 
-Porównując detekcję z faktycznymi anomaliami, widzimy pewną korelacje między wynikami.
-Sprawdźmy jakość predykcji.
 
 ```{r}
-pred = prediction(data$c, data$pred)
+pred = prediction(data$class, data$pred)
 perf = performance(pred, "tpr", "fpr")
 plot(perf)
 ```
 
-
-Analiza ROC daje nam obraz zadowalający, pole pod krzywą jest bliskie 1, więc model wydaje się być dobry.
-Sprawdźmy jeszcze miarę F.
+Sprawdźmy jeszcze miarę F1. Zwraca wysokie wyniki tylko, gdy jednoczenie oba współczynniki, precyzji i odzysku, dają wysokie wyniki.
 
 ```{r}
-data = data %>% mutate(tp = c & pred)
-data = data %>% mutate(fp = !c & pred)
-data = data %>% mutate(tn = !c & !pred)
-data = data %>% mutate(fn = c & !pred)
-tally(data, fn)
+data = data %>% mutate(tp = class & pred)
+data = data %>% mutate(fp = !class & pred)
+data = data %>% mutate(tn = !class & !pred)
+data = data %>% mutate(fn = class & !pred)
 recall = tally(data, tp) / (tally(data, tp) + tally(data, fn))
 precision = tally(data, tp) / (tally(data, tp) + tally(data, fp))
 f_value = 2 * recall * precision / (recall + precision)
@@ -146,10 +185,22 @@ f_value
 
 ```
 
-Jako, że ta miara wysokie wyniki zwraca tylko gdy oba współczynniki, tj precyzji i odzysku, naraz dają wysokie wyniki, to jakość predykcji możemy uznać za dobrą.
+Na tym etapie mamy wyniki jakie metody grupowania mogłyby dać dla tego zbioru danych.
+Są to niestety miary które niewiele mówią o jakości predykcji dla nowych danych.
+Są one w zasadzie tylko poglądowe, aby upewnić się że można wytrenować model w sposób nienadzorowany metodami grupowania,
+tak aby wyniki detekcji anomalii na podstawie tego modelu były nielosowe i relatywnie poprawne.
 
-Spróbujmy na podstawie zbudowanego modelu przewidzieć wynik grupowania dla nowych danych
+W tym miejscu warto zaznaczyć, że wynik NaN oznacza, że i precyzja i odzysk osiągnęły wartość 0, czyli nie było poprawnie zakwalifikowanej nawet jednej anomalii.
+W pozostałych przypadkach, określona wartość będzie plasowała się w przedziale [0,1], gdzie 0 będzie oznaczało jakość niską, a 1 wysoką.
+
+Natomiast, aby określić jakość modelu, musielibyśmy zastosować go dla nowych danych i sprawdzić czy predykcje okazałyby się identyczne z faktycznym wynikiem kwalifikacji anomalii.
+
+Aby określić jak model radzi sobie z nowymi danymi, będziemy musieli go zastosować dla zbioru danych który nie został wzięty pod uwagę przy tworzeniu modelu.
+
+
+
 ```{r}
+outlier_treshold = 0.8
 predict.kmeans <- function(object, newdata){
     centers <- object$centers
     n_centers <- nrow(centers)
@@ -158,5 +209,38 @@ predict.kmeans <- function(object, newdata){
     max.col(-dist_mat)
 }
 
-predictions = predict(cluster_data, smtp_test_x)
+groups = predict(cluster_data, data_test_x)
+rm(data)
+data = data_test %>% mutate(group = groups)
+data %<>% mutate(dist = sqrt((V1-cluster_centers[group, 1])^2 + (V2-cluster_centers[group, 2])^2 + (V3-cluster_centers[group, 3])^2 + (V4-cluster_centers[group, 4])^2)) %>% arrange(dist)
+data$dist = data$dist / max(data$dist)
+data = data %>% mutate(pred = as.integer(dist > outlier_treshold))
+plot(data$dist)
 ```
+
+Zrobiliśmy predykcje grup na podstawie modelu, zaaplikowaliśmy miarę niepodobieństwa na wyniki danych testowych. Rozkład posortowanych miar niepodobieństwa dla danych testowych prezentuje się jak wyżej.
+
+Aby określić jakość predykcji, zastosujemy analizę roc oraz wyliczymy miarę F1.
+```{r}
+pred = prediction(data$class, data$pred)
+perf = performance(pred, "tpr", "fpr")
+plot(perf)
+```
+
+```{r}
+
+data = data %>% mutate(tp = class & pred)
+data = data %>% mutate(fp = !class & pred)
+data = data %>% mutate(tn = !class & !pred)
+data = data %>% mutate(fn = class & !pred)
+recall = tally(data, tp) / (tally(data, tp) + tally(data, fn))
+precision = tally(data, tp) / (tally(data, tp) + tally(data, fp))
+f_value = 2 * recall * precision / (recall + precision)
+f_value
+```
+
+
+Miary jakości powyżej oznaczają, że detekcja anomalii z użyciem takich parametrów, miary niepodobieństwa w postaci odległości od najbliższego klastra i z zastosowaniem grupowania centroidami nie przynosi żadnego uzysku ponad losowe wybieranie anomalii spośród danych.
+Może być to spowodowane, że algorytm centroidów jest słabo dostosowany do charakterystyki danych tego zbioru, jak również słabym dopasowaniem miary niepodobieństwa.
+
+Możliwe, że w przypadku tego zbioru danych zastosowanie innych algorytmów grupowania oraz innych miar niepodobieństwa do grup okazałoby się jakościowo lepszym rozwiązaniem.
