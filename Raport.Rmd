@@ -1,5 +1,5 @@
 ---
-title: "Przykładowy przebieg doboru hiperparametrów"
+title: "Raport"
 output: pdf_document
 ---
 
@@ -20,6 +20,7 @@ library(knitr)
 library(data.table)
 library(caTools)
 ```
+
 
 ```{r load data}
 mammography_x = read.csv(file = 'mammography_x.csv', header=FALSE)
@@ -109,9 +110,9 @@ sum(data_train_y)
 sum(data_test_y)
 ```
 
-###Grupowanie
+### Grupowanie
 
-#####K-Means
+##### K-Means
 Do pogrupowania danych z użyciem algorytmu centroidów, trzeba wiedzieć ile takich centroidów ma być w danych.
 Sprawdzimy to z wykorzystaniem funkcji fviz_nbclust z pakietu factoextra.
 Jako, że można użyć kilku metod do sprawdzenia optymalnej ilości klastrów, sprawdźmy więcej niż jedną.
@@ -244,3 +245,44 @@ Miary jakości powyżej oznaczają, że detekcja anomalii z użyciem takich para
 Może być to spowodowane, że algorytm centroidów jest słabo dostosowany do charakterystyki danych tego zbioru, jak również słabym dopasowaniem miary niepodobieństwa.
 
 Możliwe, że w przypadku tego zbioru danych zastosowanie innych algorytmów grupowania oraz innych miar niepodobieństwa do grup okazałoby się jakościowo lepszym rozwiązaniem.
+
+# Klasyfikacja
+
+Celem porównania działania algorytmów grupowania do nienadzorowanej detekcji anomalii z metodami klasyfikacji, na tych samych zbiorach danych uruchomiono algorytmy których zadaniem była nadzorowana klasyfikacja anomalii.
+
+```{r}
+f_value <- function (cm) {
+  fp = cm[1,2]
+  fn = cm[2,1]
+  tp = cm[2,2]
+  recall = tp / (tp+fn)
+  precision = tp / (tp+fp)
+  f = (2 * recall * precision) / (recall + precision)
+  return(f)
+}
+```
+
+## Support Vector Machines (SVM)
+
+```{r}
+svm_model = svm(as.factor(class) ~ ., data = data_train, type = 'C-classification', kernel = 'polynomial')
+y_pred = predict(svm_model, newdata = data_test_x)
+cm = table(data_test_y$class, y_pred)
+f_value(cm)
+```
+
+```{r}
+nvb_model = naiveBayes(as.factor(class) ~ ., data = data_train)
+y_pred = predict(nvb_model, newdata = data_test_x)
+cm = table(data_test_y$class, y_pred)
+f_value(cm)
+```
+
+
+```{r}
+nvb_model = ctree(as.factor(class) ~ ., data = data_train)
+y_pred = predict(nvb_model, newdata = data_test_x)
+cm = table(data_test_y$class, y_pred)
+f_value(cm)
+```
+
