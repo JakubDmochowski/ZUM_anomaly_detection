@@ -1,6 +1,8 @@
 ---
 title: "Przykładowy przebieg doboru hiperparametrów"
-output: pdf_document
+output:
+  html_document:
+    df_print: paged
 ---
 
 ```{r setup, include=FALSE}
@@ -36,46 +38,7 @@ Aby lepiej zrozumiec charakterystyke danych, wyswietlmy je i zaznaczmy znane ano
 plot_ly(mammography,
         x = ~V1,
         y = ~V2,
-        color=~class,
-        colors=c('#ffff00', '#000000'),
-        opacity=0.7,
-        size=1
-      )
-plot_ly(mammography,
-        x = ~V1,
-        y = ~V3,
-        color=~class,
-        colors=c('#ffff00', '#000000'),
-        opacity=0.7,
-        size=1
-      )
-plot_ly(mammography,
-        x = ~V1,
-        y = ~V4,
-        color=~class,
-        colors=c('#ffff00', '#000000'),
-        opacity=0.7,
-        size=1
-      )
-plot_ly(mammography,
-        x = ~V2,
-        y = ~V3,
-        color=~class,
-        colors=c('#ffff00', '#000000'),
-        opacity=0.7,
-        size=1
-      )
-plot_ly(mammography,
-        x = ~V2,
-        y = ~V4,
-        color=~class,
-        colors=c('#ffff00', '#000000'),
-        opacity=0.7,
-        size=1
-      )
-plot_ly(mammography,
-        x = ~V3,
-        y = ~V4,
+        z = ~V3,
         color=~class,
         colors=c('#ffff00', '#000000'),
         opacity=0.7,
@@ -110,9 +73,9 @@ sum(data_train_y)
 sum(data_test_y)
 ```
 
-###Grupowanie
+## Grupowanie
 
-#####K-Means
+##### K-Means
 Do pogrupowania danych z użyciem algorytmu centroidów, trzeba wiedzieć ile takich centroidów ma być w danych.
 Sprawdzimy to z wykorzystaniem funkcji fviz_nbclust z pakietu factoextra.
 Jako, że można użyć kilku metod do sprawdzenia optymalnej ilości klastrów, sprawdźmy więcej niż jedną.
@@ -126,16 +89,17 @@ fviz_nbclust(data_train_x, kmeans, method = "wss")
 ```
 
 ```{r number of clusters}
-fviz_nbclust(data_train_x, kmeans, method = "gap_stat", k.max=8, nboot=50)
+fviz_nbclust(data_train_x, kmeans, method = "gap_stat", k.max=7, nboot=30)
 ```
 
 Zwizualizujmy, jak wygląda grupowanie dla wybranej ilości centroidów.
 
 ```{r}
-no_clusters = 6
+no_clusters = 3
 cluster_data = kmeans(data_train_x, no_clusters, algorithm="Hartigan-Wong")
 fviz_cluster(cluster_data, data = data_train_x)
 ```
+
 Tutaj, aby wybrać anomalie spośród punktów w grupach należałoby dobrać jakąś miarę niepodobieństwa.
 Określmy przykładową miarę niepodobieństwa jako odległość danej od środka grupy do której została zakwalifikowana.
 
@@ -146,39 +110,43 @@ data %<>% mutate(group = cluster_data$cluster) %>% mutate(dist = sqrt((V1-cluste
 data$dist = data$dist / max(data$dist)
 plot(data$dist)
 ```
-Miara niepodobieństwa mapuje nam dane wielowymiarowe na jeden wymiar. Jednowymiarowe dane jesteśmy w stanie porównać, dzięki czemu możemy określić jakiś próg, powyżej którego będziemy dane traktowali jako anomalie.
+
+Miara niepodobieństwa mapuje nam dane wielowymiarowe na jeden wymiar. 
 
 ```{r}
-outlier_threshold = 0.5
-data = data %>% mutate(pred = as.integer(dist > outlier_threshold))
 plot_ly(data,
         x = ~V1,
         y = ~V2,
         z = ~V3,
-        color=~pred,
+        color=~dist,
         colors=c('#ffff00', '#000000'),
         opacity=0.7,
         size=1
       )
 ```
 
+Jednowymiarowe dane jesteśmy w stanie porównać, dzięki czemu możemy określić jakiś próg, powyżej którego będziemy dane traktowali jako anomalie.
 Po zakwalifikowaniu anomalii, możemy porównać wyniki z faktycznie wykrytymi anomaliami podanymi w danych wejściowych. W ten sposób dowiemy się, jaka jest jakość modelu a-priori.
 Na tym etapie wybieramy jakimi miarami jakości chcielibyśmy się posłużyć. W naszym przypadku wybieramy analizę ROC oraz miarę F1.
 
 
 ```{r}
-pred = prediction(data$class, data$pred)
+outlier_threshold = 0.35
+data = data %>% mutate(pred_int = as.integer(dist > outlier_threshold))
+
+pred = prediction(predictions=data$dist, labels=data$class)
 perf = performance(pred, "tpr", "fpr")
 plot(perf)
+abline(0,1,col="#0000ff")
 ```
 
 Sprawdźmy jeszcze miarę F1. Zwraca wysokie wyniki tylko, gdy jednoczenie oba współczynniki, precyzji i odzysku, dają wysokie wyniki.
 
 ```{r}
-data = data %>% mutate(tp = class & pred)
-data = data %>% mutate(fp = !class & pred)
-data = data %>% mutate(tn = !class & !pred)
-data = data %>% mutate(fn = class & !pred)
+data = data %>% mutate(tp = class & pred_int)
+data = data %>% mutate(fp = !class & pred_int)
+data = data %>% mutate(tn = !class & !pred_int)
+data = data %>% mutate(fn = class & !pred_int)
 recall = tally(data, tp) / (tally(data, tp) + tally(data, fn))
 precision = tally(data, tp) / (tally(data, tp) + tally(data, fp))
 f_value = 2 * recall * precision / (recall + precision)
@@ -201,7 +169,7 @@ Aby określić jak model radzi sobie z nowymi danymi, będziemy musieli go zasto
 
 
 ```{r}
-outlier_threshold = 0.8
+outlier_threshold = 0.4
 predict.kmeans <- function(object, newdata){
     centers <- object$centers
     n_centers <- nrow(centers)
@@ -211,11 +179,10 @@ predict.kmeans <- function(object, newdata){
 }
 
 groups = predict(cluster_data, data_test_x)
-rm(data)
 data = data_test %>% mutate(group = groups)
 data %<>% mutate(dist = sqrt((V1-cluster_centers[group, 1])^2 + (V2-cluster_centers[group, 2])^2 + (V3-cluster_centers[group, 3])^2 + (V4-cluster_centers[group, 4])^2)) %>% arrange(dist)
 data$dist = data$dist / max(data$dist)
-data = data %>% mutate(pred = as.integer(dist > outlier_threshold))
+data = data %>% mutate(pred_int = as.integer(dist > outlier_threshold))
 plot(data$dist)
 ```
 
@@ -223,17 +190,18 @@ Zrobiliśmy predykcje grup na podstawie modelu, zaaplikowaliśmy miarę niepodob
 
 Aby określić jakość predykcji, zastosujemy analizę roc oraz wyliczymy miarę F1.
 ```{r}
-pred = prediction(data$class, data$pred)
+pred = prediction(predictions=data$dist, labels=data$class)
 perf = performance(pred, "tpr", "fpr")
 plot(perf)
+abline(0,1,col="#0000ff")
 ```
 
 ```{r}
 
-data = data %>% mutate(tp = class & pred)
-data = data %>% mutate(fp = !class & pred)
-data = data %>% mutate(tn = !class & !pred)
-data = data %>% mutate(fn = class & !pred)
+data = data %>% mutate(tp = class & pred_int)
+data = data %>% mutate(fp = !class & pred_int)
+data = data %>% mutate(tn = !class & !pred_int)
+data = data %>% mutate(fn = class & !pred_int)
 recall = tally(data, tp) / (tally(data, tp) + tally(data, fn))
 precision = tally(data, tp) / (tally(data, tp) + tally(data, fp))
 f_value = 2 * recall * precision / (recall + precision)
@@ -241,12 +209,14 @@ f_value
 ```
 
 
-Miary jakości powyżej oznaczają, że detekcja anomalii z użyciem takich parametrów, miary niepodobieństwa w postaci odległości od najbliższego klastra i z zastosowaniem grupowania centroidami nie przynosi żadnego uzysku ponad losowe wybieranie anomalii spośród danych.
+Miary jakości powyżej oznaczają, że detekcja anomalii z użyciem takich parametrów, miary niepodobieństwa w postaci odległości od najbliższego klastra i z zastosowaniem grupowania centroidami nie przynosi znaczącego uzysku ponad losowe wybieranie anomalii spośród danych.
 Może być to spowodowane, że algorytm centroidów jest słabo dostosowany do charakterystyki danych tego zbioru, jak również słabym dopasowaniem miary niepodobieństwa.
 
 Możliwe, że w przypadku tego zbioru danych zastosowanie innych algorytmów grupowania oraz innych miar niepodobieństwa do grup okazałoby się jakościowo lepszym rozwiązaniem.
 
+## Klasyfikacja
 
+Do określania miary F1 użyjemy definicji funkcji:
 
 ```{r}
 f_value <- function (cm) {
@@ -260,73 +230,50 @@ f_value <- function (cm) {
 }
 ```
 
-## Support Vector Machines (SVM)
+#### Algorytmy
+
+##### Support Vector Machines (SVM)
 
 ```{r}
-svm_model = svm(as.factor(class) ~ ., data = data_train, type = 'C-classification', kernel = 'polynomial')
-y_pred = predict(svm_model, newdata = data_test_x)
-cm = table(data_test_y$class, y_pred)
-f_value(cm)
+svm.model = svm(as.factor(class) ~ ., data = data_train, type = 'C-classification', kernel = 'polynomial', probability = TRUE)
+svm.pred = predict(svm.model, newdata = data_test_x)
+svm.cm = table(data_test_y$class, svm.pred)
+f_value(svm.cm)
 ```
 
+##### Naive-Bayes
+
 ```{r}
-nvb_model = naiveBayes(as.factor(class) ~ ., data = data_train)
-y_pred = predict(nvb_model, newdata = data_test_x)
-cm = table(data_test_y$class, y_pred)
-f_value(cm)
+nvb.model = naiveBayes(as.factor(class) ~ ., data = data_train)
+nvb.pred = predict(nvb.model, newdata = data_test_x)
+nvb.cm = table(data_test_y$class, nvb.pred)
+f_value(nvb.cm)
 ```
 
+##### C-Tree
 
 ```{r}
-nvb_model = ctree(as.factor(class) ~ ., data = data_train)
-y_pred = predict(nvb_model, newdata = data_test_x)
-cm = table(data_test_y$class, y_pred)
-f_value(cm)
+ct.model = ctree(as.factor(class) ~ ., data = data_train)
+ct.pred = predict(ct.model, newdata = data_test_x)
+ct.cm = table(data_test_y$class, ct.pred)
+f_value(ct.cm)
 ```
 
-```{r}
-rm(list = ls())
-
-mammography_x = read.csv(file = 'mammography_x.csv', header=FALSE)
-mammography_y = read.csv(file = 'mammography_y.csv', header=FALSE)
-mammography = mammography_x %>% mutate(class = mammography_y$V1)
-
-split_ratio = 0.8
-split = sample.split(mammography, SplitRatio = split_ratio)
-data_train = subset(mammography, split == TRUE)
-data_test = subset(mammography, split == FALSE)
-
-data_train_x = data_train %>% select(1:6)
-data_train_y = data_train %>% select(7)
-data_test_x = data_test %>% select(1:6)
-data_test_y = data_test %>% select(7)
-
-metric = "euclidean"
-method = "kmeans"
-dissimilarity_measure = "distance"
-args = c(3, 0.05)
-outlier_threshold_train = 0.8
-outlier_threshold_test = 0.5
-
-  diss_matrix = dist(data_train_x, method=metric)
-  print(paste(as.numeric(args[1])))
-  cluster_data = dbscan(diss_matrix, eps=as.integer(args[1]))
-  plot(
-    fviz_cluster(
-      list(data = data_train_x, 
-      cluster=cluster_data$cluster),
-      ggtheme = theme_minimal()
-    )
-  )
-  groups = predict(cluster_data, data_test_x, data=data_train_x)
-  data = data_test %>% mutate(group = as.integer(!groups))
-```
-
+#### Jakość modeli
 
 ```{r}
-library(DDoutlier)
-diss = data %>% select(1:6)
-data$class = DB(diss, d = as.numeric(args[1]), fraction = as.numeric(args[2]))$classification
-data = data %>% mutate(class = as.integer(class == 'Outlier'))
-
+require(ROCR)
+svm.prob = predict(svm.model, type="prob", newdata= data_test_x, probability = TRUE)
+svm.rocr = prediction(attr(svm.prob, "probabilities")[,2], data_test_y$class)
+svm.perf = performance(svm.rocr, "tpr","fpr")
+nvb.prob = predict(nvb.model, newdata=data_test_x, type="raw")
+nvb.rocr = prediction(nvb.prob[,2], data_test_y$class)
+nvb.perf = performance(nvb.rocr, "tpr","fpr")
+ct.prob = predict(ct.model, newdata=data_test_x, type="prob")
+ct.rocr = prediction(ct.prob[,2], data_test_y$class)
+ct.perf = performance(ct.rocr, "tpr","fpr")
+plot(svm.perf, col=4, main="ROC curves of different machine learning classifier")
+legend(0.6, 0.6, c('svm', 'ctree', 'Naive Bayes'), 4:6)
+plot(ct.perf, col=5, add=TRUE)
+plot(nvb.perf, col=6, add=TRUE)
 ```
