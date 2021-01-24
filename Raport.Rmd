@@ -1,6 +1,7 @@
 ---
 title: "Przykładowy przebieg doboru hiperparametrów"
 output:
+  pdf_document: default
   html_document:
     df_print: paged
 ---
@@ -216,7 +217,22 @@ Możliwe, że w przypadku tego zbioru danych zastosowanie innych algorytmów gru
 
 ## Klasyfikacja
 
-Do określania miary F1 użyjemy definicji funkcji:
+Na tych samych zbiorach danych uruchomiono nadzorowane algorytmy klasyfikacji w celu porównania ich skuteczności z algorytmami grupującymi uczonymi bez nadzoru.
+W tym celu wykorzystano wbudowane metody klasyfikacji:
+* `svm` (Support Vector Machine) z funkcją jądrową wielomianową
+* `naiveBayes` (Naiwny klasyfikator Bayesowski)
+* `ctree` (Conditional Inference Tree)
+
+ 
+
+Do każdej z metod podano wartości ze zbioru treningowego wraz z etykietą przynależności do klasy anomalii, a następnie dokonano predyckji klasy dla punktów ze zbioru testowego.
+Zbiory były takie same jak podczas nienadzorowanego grupowania.
+
+ 
+
+Dla każdej z metod dokonano pomiaru wskażnika F na podstawie macierzy błędów oraz wyznaczono kształt krzywej ROC.
+
+Do określania miary F1 użyliśmy definicji funkcji:
 
 ```{r}
 f_value <- function (cm) {
@@ -234,6 +250,9 @@ f_value <- function (cm) {
 
 ##### Support Vector Machines (SVM)
 
+Metoda ma za zadanie wyznaczyć hiperpłaszczyznę oddzielającą przykłady należące do dwóch klas w taki sposób aby uzyskać między nimi największy margines.
+Funkcja jądrowa ma zadanie przekształcić dane wejściowe do takiej przestrzeni, aby możliwe było wyznaczenie płaszczyzny która oddziela najwięcej punktów.
+
 ```{r}
 svm.model = svm(as.factor(class) ~ ., data = data_train, type = 'C-classification', kernel = 'polynomial', probability = TRUE)
 svm.pred = predict(svm.model, newdata = data_test_x)
@@ -241,7 +260,11 @@ svm.cm = table(data_test_y$class, svm.pred)
 f_value(svm.cm)
 ```
 
-##### Naive-Bayes
+##### Naiwny klasyfikator Bayesowski
+
+Metoda zakłada niezależność zmiennych decyzyjnych, i wyznacza na ich podstawie prawdopodobieństwo przynależności przynależności punktu wejściowego do danej klasy,
+tworząc modele rozkładów ze na podstawie przykładów ze zbioru uczącego. Ponieważ jedną z dwu klas stanowią anomalie, modelowanie ich rozkładu
+z definiji powinno okazać się nieskuteczne.
 
 ```{r}
 nvb.model = naiveBayes(as.factor(class) ~ ., data = data_train)
@@ -250,7 +273,11 @@ nvb.cm = table(data_test_y$class, nvb.pred)
 f_value(nvb.cm)
 ```
 
-##### C-Tree
+##### Conditional Inference Tree (ctree)
+
+Drzewo wnioskowania warunkowego jest drzewem decyzyjnym konstruującym kolejne poziomy podziału na podstawie statystycznego testu niezależności zmiennych decyzyjnych od klasy.
+Dla każdego poziomu decyzji wybierana jest ta zmienna decyzyjna dla której test niezależności klasy od zmiennej ma najwyższą istotność (zmienna jest silnie związana z klasą).
+Tak skonstuowane drzewo nie wymaga dlaszego przycinania.
 
 ```{r}
 ct.model = ctree(as.factor(class) ~ ., data = data_train)
@@ -260,6 +287,8 @@ f_value(ct.cm)
 ```
 
 #### Jakość modeli
+
+Analiza ROC pozwala nam zobaczyć jakość predykcji danego algorytmu. Im większe jest pole pod wykresem, tym wyższa jakość modelu.
 
 ```{r}
 require(ROCR)
@@ -277,3 +306,4 @@ legend(0.6, 0.6, c('svm', 'ctree', 'Naive Bayes'), 4:6)
 plot(ct.perf, col=5, add=TRUE)
 plot(nvb.perf, col=6, add=TRUE)
 ```
+
