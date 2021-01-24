@@ -102,24 +102,24 @@ if(method == "kmeans") {
   plot(fviz_cluster(list(data = data_train_x, cluster=cluster_data$cluster), ggtheme = theme_minimal()))
   data = data_test
   centers = cluster_data$centers
-  data$group = cmeans(data_test_x, 4, dist=metric)$cluster
+  data$group = cmeans(data_test_x, centers, dist=metric)$cluster
 }
 
 cluster_centers = cluster_data$centers
 
 if(dissimilarity_measure == "uCBLOF") {
   
-  data = data %>% mutate(outlier_score = sqrt((V1-cluster_centers[group, 1])^2 + (V2-cluster_centers[group, 2])^2 + (V3-cluster_centers[group, 3])^2 + (V4-cluster_centers[group, 4])^2))
+  data = data %>% mutate(outlier_score = sqrt((V1-cluster_centers[group, 1])^2 + (V2-cluster_centers[group, 2])^2 + (V3-cluster_centers[group, 3])^2 + (V4-cluster_centers[group, 4])^2 + (V5-cluster_centers[group, 5])^2 + (V6-cluster_centers[group, 6])^2))
   
 } else if(dissimilarity_measure == "LDCOF") {
   
-  data = data %>% mutate(dist = sqrt((V1-cluster_centers[group, 1])^2 + (V2-cluster_centers[group, 2])^2 + (V3-cluster_centers[group, 3])^2 + (V4-cluster_centers[group, 4])^2))
+  data = data %>% mutate(dist = sqrt((V1-cluster_centers[group, 1])^2 + (V2-cluster_centers[group, 2])^2 + (V3-cluster_centers[group, 3])^2 + (V4-cluster_centers[group, 4])^2 + (V5-cluster_centers[group, 5])^2 + (V6-cluster_centers[group, 6])^2))
   average_dist = data %>% group_by(group) %>% summarise(avg_dist = mean(dist))
   data = data %>% mutate(outlier_score = dist / average_dist[group,2]$avg_dist)
   
 } else if(dissimilarity_measure == "CBLOF") {
   
-  data = data %>% mutate(dist = sqrt((V1-cluster_centers[group, 1])^2 + (V2-cluster_centers[group, 2])^2 + (V3-cluster_centers[group, 3])^2 + (V4-cluster_centers[group, 4])^2))
+  data = data %>% mutate(dist = sqrt((V1-cluster_centers[group, 1])^2 + (V2-cluster_centers[group, 2])^2 + (V3-cluster_centers[group, 3])^2 + (V4-cluster_centers[group, 4])^2 + (V5-cluster_centers[group, 5])^2 + (V6-cluster_centers[group, 6])^2))
   group_count = data %>% group_by(group) %>% summarise(count = n())
   data = data %>% mutate(outlier_score = dist * group_count[group,2]$count)
   

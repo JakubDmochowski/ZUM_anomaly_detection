@@ -23,6 +23,22 @@ library(caTools)
 library(partykit)
 ```
 
+## Porównanie algorytmów grupowania cmeans, kmeans dla miar niepodobieństwa CBLOF, uCBLOF i LDCOF względem klasyfikacji algorytmami SVM, Naive-Bayes i CTree
+
+### Założenia
+W tym dokumencie chcemy się skupić na porównaniu doboru miary niepodobieństwa i algorytmu grupowania, a wynikami wybranych algorytmów klasyfikacji.
+W związku z tym, porównania będziemy wykonywać już na dobranych parametrach.
+Nie zapewniamy, że parametry zostały dobrane idealnie do podanych zbiorów danych i z użyciem odpowiednich narzędzi.
+Dobór parametrów został wykonany dla każdego zbioru danych oddzielnie.
+Sposób doboru parametrów został opisany w oddzielnym pliku.
+
+### Przebieg badania
+
+Zaczytamy najpierw dane dwóch zbiorów danych, oba mają dane 6-wymiarowe.
+Zbiór mammography składa się z  11183 rekordów, z czego 260 to anomalie.
+Zbiór annthyroid składa się z 7200 rekordów, z czego 534 to anomalie
+
+
 ```{r load data}
 rm(list = ls())
 mammography_x = read.csv(file = 'mammography_x.csv', header=FALSE)
@@ -32,6 +48,53 @@ mammography = mammography_x %>% mutate(class = mammography_y$V1)
 annthyroid_x = read.csv(file = 'annthyroid_x.csv', header=FALSE)
 annthyroid_y = read.csv(file = 'annthyroid_y.csv', header=FALSE)
 annthyroid = annthyroid_x %>% mutate(class = annthyroid_y$V1)
+```
+
+Wyniki poszczególnych bloków kodu będą przedstawiały odpowiednio:
+- wykres wstępnie wizualizujący efekty grupowania,
+- wykres przedstawiający rozkład wyników pomiaru niepodobieństwa do dopasowanych grup dla poszczególnych punktów ze zbioru danych,
+- wynik pomiaru współczynnika F dla zadanej wartości odcięcia,
+- wykres ROC 
+
+
+Wewnątrz bloków kodu będziemy ustalać podział dla danych treningowych i testowych,
+określać z którego algorytmu będziemy korzystać,
+podawać hiperparametry niezbędne do jego działania
+oraz dodatkowo określać poziom odcięcia miary niepodobieństwa, od którego będziemy uznawać punkty jako anomalie.
+
+#### Porównanie wpływu miary niepodobieństwa
+
+Sprawdźmy najpierw w ramach pierwszego zbioru danych, jaki wpływ na wynik ma dobór miary niepodobieństwa.
+
+```{r echo=FALSE}
+split_ratio = 0.8
+set.seed(123)
+split = sample.split(mammography, SplitRatio = split_ratio)
+data_train = subset(mammography, split == TRUE)
+data_test = subset(mammography, split == FALSE)
+
+metric = "euclidean"
+method = "kmeans"
+dissimilarity_measure = "uCBLOF"
+no_clusters = 6
+algorithm = "Hartigan-Wong"
+outlier_threshold = 0.3
+source("Interface.R", local=knitr::knit_global(), echo=FALSE)
+```
+```{r echo=FALSE}
+split_ratio = 0.8
+set.seed(123)
+split = sample.split(mammography, SplitRatio = split_ratio)
+data_train = subset(mammography, split == TRUE)
+data_test = subset(mammography, split == FALSE)
+
+metric = "euclidean"
+method = "kmeans"
+dissimilarity_measure = "CBLOF"
+no_clusters = 6
+algorithm = "Hartigan-Wong"
+outlier_threshold = 0.3
+source("Interface.R", local=knitr::knit_global(), echo=FALSE)
 ```
 
 
@@ -44,14 +107,61 @@ data_test = subset(mammography, split == FALSE)
 
 metric = "euclidean"
 method = "kmeans"
+dissimilarity_measure = "LDCOF"
+no_clusters = 6
+algorithm = "Hartigan-Wong"
+outlier_threshold = 0.3
+source("Interface.R", local=knitr::knit_global(), echo=FALSE)
+```
+
+
+```{r echo=FALSE}
+split_ratio = 0.8
+set.seed(123)
+split = sample.split(mammography, SplitRatio = split_ratio)
+data_train = subset(mammography, split == TRUE)
+data_test = subset(mammography, split == FALSE)
+
+metric = "euclidean"
+method = "cmeans"
 dissimilarity_measure = "uCBLOF"
-no_clusters = 3
+no_clusters = 6
 algorithm = "Hartigan-Wong"
 outlier_threshold = 0.8
 source("Interface.R", local=knitr::knit_global(), echo=FALSE)
 ```
 
+```{r echo=FALSE}
+split_ratio = 0.8
+set.seed(123)
+split = sample.split(mammography, SplitRatio = split_ratio)
+data_train = subset(mammography, split == TRUE)
+data_test = subset(mammography, split == FALSE)
 
+metric = "euclidean"
+method = "cmeans"
+dissimilarity_measure = "CBLOF"
+no_clusters = 6
+algorithm = "Hartigan-Wong"
+outlier_threshold = 0.8
+source("Interface.R", local=knitr::knit_global(), echo=FALSE)
+```
+
+```{r echo=FALSE}
+split_ratio = 0.8
+set.seed(123)
+split = sample.split(mammography, SplitRatio = split_ratio)
+data_train = subset(mammography, split == TRUE)
+data_test = subset(mammography, split == FALSE)
+
+metric = "euclidean"
+method = "cmeans"
+dissimilarity_measure = "LDCOF"
+no_clusters = 6
+algorithm = "Hartigan-Wong"
+outlier_threshold = 0.8
+source("Interface.R", local=knitr::knit_global(), echo=FALSE)
+```
 
 ```{r echo=FALSE}
 split_ratio = 0.8
@@ -63,11 +173,13 @@ data_test = subset(annthyroid, split == FALSE)
 metric = "euclidean"
 method = "kmeans"
 dissimilarity_measure = "uCBLOF"
-no_clusters = 5
+no_clusters = 6
 algorithm = "Hartigan-Wong"
 outlier_threshold = 0.3
 source("Interface.R", local=knitr::knit_global(), echo=FALSE)
 ```
+
+
 ```{r echo=FALSE}
 split_ratio = 0.8
 set.seed(123)
@@ -78,12 +190,11 @@ data_test = subset(annthyroid, split == FALSE)
 metric = "euclidean"
 method = "kmeans"
 dissimilarity_measure = "CBLOF"
-no_clusters = 5
+no_clusters = 6
 algorithm = "Hartigan-Wong"
 outlier_threshold = 0.3
 source("Interface.R", local=knitr::knit_global(), echo=FALSE)
 ```
-
 
 ```{r echo=FALSE}
 split_ratio = 0.8
@@ -95,11 +206,13 @@ data_test = subset(annthyroid, split == FALSE)
 metric = "euclidean"
 method = "kmeans"
 dissimilarity_measure = "LDCOF"
-no_clusters = 5
+no_clusters = 6
 algorithm = "Hartigan-Wong"
 outlier_threshold = 0.3
 source("Interface.R", local=knitr::knit_global(), echo=FALSE)
 ```
+
+
 ```{r echo=FALSE}
 split_ratio = 0.8
 set.seed(123)
@@ -110,12 +223,55 @@ data_test = subset(annthyroid, split == FALSE)
 metric = "euclidean"
 method = "cmeans"
 dissimilarity_measure = "uCBLOF"
-no_clusters = 5
+no_clusters = 6
 algorithm = "Hartigan-Wong"
 outlier_threshold = 0.3
 source("Interface.R", local=knitr::knit_global(), echo=FALSE)
 ```
+
+
 ```{r echo=FALSE}
+split_ratio = 0.8
+set.seed(123)
+split = sample.split(annthyroid, SplitRatio = split_ratio)
+data_train = subset(annthyroid, split == TRUE)
+data_test = subset(annthyroid, split == FALSE)
+
+metric = "euclidean"
+method = "cmeans"
+dissimilarity_measure = "CBLOF"
+no_clusters = 6
+algorithm = "Hartigan-Wong"
+outlier_threshold = 0.3
+source("Interface.R", local=knitr::knit_global(), echo=FALSE)
+```
+
+```{r echo=FALSE}
+split_ratio = 0.8
+set.seed(123)
+split = sample.split(annthyroid, SplitRatio = split_ratio)
+data_train = subset(annthyroid, split == TRUE)
+data_test = subset(annthyroid, split == FALSE)
+
+metric = "euclidean"
+method = "cmeans"
+dissimilarity_measure = "LDCOF"
+no_clusters = 6
+algorithm = "Hartigan-Wong"
+outlier_threshold = 0.3
+source("Interface.R", local=knitr::knit_global(), echo=FALSE)
+```
+
+### Wyniki detekcji anomalii metodami klasyfikacji
+
+Wynik klasyfikacji metodami svm, ctree i naiwnego klasyfikatora bayesowskiego.
+
+Wyniki są przestawione w formie tabeli i wykresu.
+Tabela przedstawia wyniki pomiaru wskaźnika F dla poszczególnych algorytmów klasyfikacji.
+Wykres przedstawia wynik analizy ROC wybranych algorytmów.
+Miara F została określona na podstawie wyników klasyfikacji klas anomalii dla danych testowych.
+
+```{r, echo=FALSE}
 split_ratio = 0.8
 set.seed(123)
 split = sample.split(annthyroid, SplitRatio = split_ratio)
@@ -126,3 +282,8 @@ source("Classification.R", local=knitr::knit_global(), echo=FALSE)
 ```
 
 
+### Wnioski
+
+Niestety, wyniki detekcji anomalii z użyciem algorytmów grupowania na tych zbiorach okazał się niezbyt owocny.
+Widzimy niewielką zmianę jakości modelu przy zmianie algorytmów grupowania, jak i różnych miarach niepodobieństwa.
+Metody klasyfikacji okazały się dużo skuteczniejsze w przypadku tych zbiorów danych.

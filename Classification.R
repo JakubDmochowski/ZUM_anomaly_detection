@@ -20,7 +20,7 @@ ct.model = ctree(as.factor(class) ~ ., data = data_train)
 ct.pred = predict(ct.model, newdata = data_test_x)
 ct.cm = table(data_test_y$class, ct.pred)
 
-tibble(svm = f_value(svm.cm), nvb = f_value(nvb.cm), ct = f_value(ct.cm))
+print(tibble(svm = f_value(svm.cm), nvb = f_value(nvb.cm), ct = f_value(ct.cm)))
 
 svm.prob = predict(svm.model, type="prob", newdata= data_test_x, probability = TRUE)
 svm.rocr = prediction(attr(svm.prob, "probabilities")[,2], data_test_y$class)
